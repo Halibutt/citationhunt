@@ -1,4 +1,5 @@
 import chdb
+import config
 
 import flask
 
@@ -20,7 +21,7 @@ def log_time(operation):
     yield
     after = datetime.now()
     ms = (after - before).microseconds / 1000.
-    app.logger.debug('%s took %.2f ms', operation, ms)
+    flask.current_app.logger.debug('%s took %.2f ms', operation, ms)
 
 def get_stats_db():
     db = getattr(flask.g, '_stats_db', None)

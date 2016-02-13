@@ -42,7 +42,8 @@ app.add_url_rule('/stats.html', view_func = handlers.stats)
 def categories_html(lang_code):
     response = flask.make_response(
         flask.render_template('categories.html',
-            categories = get_categories(lang_code, include_default = False)))
+            categories = handlers.get_categories(
+                lang_code, include_default = False)))
     response.cache_control.max_age = CACHE_DURATION_SEMI_STATIC
     return response
 

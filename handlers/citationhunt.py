@@ -59,7 +59,7 @@ def select_random_id(lang_code, cat = CATEGORY_ALL):
         # Try to pick one id at random. For small datasets, the probability
         # of getting an empty set in a query is non-negligible, so retry a
         # few times as needed.
-        p = '1e-4' if not debug else '1e-2'
+        p = '1e-4' if not flask.current_app.debug else '1e-2'
         with log_time('select without category'):
             for retry in range(10):
                 cursor.execute(
@@ -103,7 +103,7 @@ def citation_hunt(lang_code):
     cfg = config.get_localized_config(lang_code)
 
     lang_dir = cfg.lang_dir
-    if debug:
+    if flask.current_app.debug:
         lang_dir = flask.request.args.get('dir', lang_dir)
 
     if cat is not None:
