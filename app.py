@@ -1,6 +1,6 @@
 import chdb
 import config
-from snippet_parser import CITATION_NEEDED_MARKER, REF_MARKER
+import handlers
 
 import flask
 import flask_sslify
@@ -8,17 +8,6 @@ from flask.ext.compress import Compress
 from flask.ext.mobility import Mobility
 
 import os
-import contextlib
-import collections
-from datetime import datetime
-import functools
-import itertools
-
-# the markup we're going to use for [citation needed] and <ref> tags,
-# pre-marked as safe for jinja.
-SUPERSCRIPT_HTML = '<sup class="superscript">[%s]</sup>'
-SUPERSCRIPT_MARKUP = flask.Markup(SUPERSCRIPT_HTML)
-CITATION_NEEDED_MARKUP = flask.Markup(SUPERSCRIPT_HTML)
 
 # Cache duration for snippets.
 # Since each page contains a link to the next one, even when no category is
@@ -33,125 +22,6 @@ CACHE_DURATION_SNIPPET = 60
 # such as the list of categories.
 CACHE_DURATION_SEMI_STATIC = 3 * 60 * 60
 
-@contextlib.contextmanager
-def log_time(operation):
-    before = datetime.now()
-    yield
-    after = datetime.now()
-    ms = (after - before).microseconds / 1000.
-    app.logger.debug('%s took %.2f ms', operation, ms)
-
-def get_db(lang_code):
-    localized_dbs = getattr(flask.g, '_localized_dbs', {})
-    db = localized_dbs.get(lang_code, None)
-    if db is None:
-        db = localized_dbs[lang_code] = chdb.init_db(lang_code)
-    flask.g._localized_dbs = localized_dbs
-    return db
-
-def get_stats_db():
-    db = getattr(flask.g, '_stats_db', None)
-    if db is None:
-        db = flask.g._stats_db = chdb.init_stats_db()
-    return db
-
-Category = collections.namedtuple('Category', ['id', 'title'])
-CATEGORY_ALL = Category('all', '')
-def get_categories(lang_code, include_default = True):
-    categories = getattr(flask.g, '_categories', None)
-    if categories is None:
-        cursor = get_db(lang_code).cursor()
-        cursor.execute('''
-            SELECT id, title FROM categories WHERE id != "unassigned"
-            ORDER BY title;
-        ''')
-        categories = [CATEGORY_ALL] + [Category(*row) for row in cursor]
-        flask.g._categories = categories
-    return categories if include_default else categories[1:]
-
-def get_category_by_id(lang_code, catid, default = None):
-    for c in get_categories(lang_code):
-        if catid == c.id:
-            return c
-    return default
-
-def select_snippet_by_id(lang_code, id):
-    cursor = get_db(lang_code).cursor()
-    with log_time('select snippet by id'):
-        cursor.execute('''
-            SELECT snippets.snippet, snippets.section, articles.url,
-            articles.title FROM snippets, articles WHERE snippets.id = %s AND
-            snippets.article_id = articles.page_id;''', (id,))
-        ret = cursor.fetchone()
-    return ret
-
-def select_random_id(lang_code, cat = CATEGORY_ALL):
-    cursor = get_db(lang_code).cursor()
-
-    ret = None
-    if cat is not CATEGORY_ALL:
-        with log_time('select with category'):
-            cursor.execute('''
-                SELECT snippets.id FROM snippets, articles_categories
-                WHERE snippets.article_id = articles_categories.article_id AND
-                articles_categories.category_id = %s ORDER BY RAND()
-                LIMIT 1;''', (cat.id,))
-            ret = cursor.fetchone()
-
-    if ret is None:
-        # Try to pick one id at random. For small datasets, the probability
-        # of getting an empty set in a query is non-negligible, so retry a
-        # few times as needed.
-        p = '1e-4' if not debug else '1e-2'
-        with log_time('select without category'):
-            for retry in range(10):
-                cursor.execute(
-                    'SELECT id FROM snippets WHERE RAND() < %s LIMIT 1;', (p,))
-                ret = cursor.fetchone()
-                if ret: break
-
-    assert ret and len(ret) == 1
-    return ret[0]
-
-def select_next_id(lang_code, curr_id, cat = CATEGORY_ALL):
-    cursor = get_db(lang_code).cursor()
-
-    if cat is not CATEGORY_ALL:
-        with log_time('select next id'):
-            cursor.execute('''
-                SELECT next FROM snippets_links WHERE prev = %s
-                AND cat_id = %s''', (curr_id, cat.id))
-            ret = cursor.fetchone()
-            if ret is None:
-                # curr_id doesn't belong to the category
-                return None
-            assert ret and len(ret) == 1
-            next_id = ret[0]
-    else:
-        next_id = curr_id
-        for i in range(3): # super paranoid :)
-            next_id = select_random_id(lang_code, cat)
-            if next_id != curr_id:
-                break
-    return next_id
-
-def should_autofocus_category_filter(cat, request):
-    return cat is CATEGORY_ALL and not request.MOBILE
-
-def validate_lang_code(handler):
-    @functools.wraps(handler)
-    def wrapper(lang_code = '', *args, **kwds):
-        flask.request.lang_code = lang_code
-        if lang_code not in config.lang_code_to_config:
-            response = flask.redirect(
-                flask.url_for('citation_hunt', lang_code = 'en',
-                    **flask.request.args))
-            if flask.request.path != '/':
-                response.headers['Location'] += flask.request.path
-            return response
-        return handler(lang_code, *args, **kwds)
-    return wrapper
-
 app = flask.Flask(__name__)
 Compress(app)
 debug = 'DEBUG' in os.environ
@@ -160,127 +30,15 @@ if not debug:
 Mobility(app)
 
 @app.route('/')
-@validate_lang_code
+@handlers.validate_lang_code
 def index(lang_code):
     pass # nothing to do but validate lang_code
 
-@app.route('/<lang_code>')
-@validate_lang_code
-def citation_hunt(lang_code):
-    id = flask.request.args.get('id')
-    cat = flask.request.args.get('cat')
-    cfg = config.get_localized_config(lang_code)
-
-    lang_dir = cfg.lang_dir
-    if debug:
-        lang_dir = flask.request.args.get('dir', lang_dir)
-
-    if cat is not None:
-        cat = get_category_by_id(lang_code, cat)
-        if cat is None:
-            # invalid category, normalize to "all" and try again by id
-            cat = CATEGORY_ALL
-            return flask.redirect(
-                flask.url_for('citation_hunt',
-                    lang_code = lang_code, id = id, cat = cat.id))
-    else:
-        cat = CATEGORY_ALL
-
-    if id is not None:
-        sinfo = select_snippet_by_id(lang_code, id)
-        if sinfo is None:
-            # invalid id
-            flask.abort(404)
-        snippet, section, aurl, atitle = sinfo
-        next_snippet_id = select_next_id(lang_code, id, cat)
-        if next_snippet_id is None:
-            # the snippet doesn't belong to the category!
-            assert cat is not CATEGORY_ALL
-            return flask.redirect(
-                flask.url_for('citation_hunt',
-                    id = id, cat = CATEGORY_ALL.id,
-                    lang_code = lang_code))
-        autofocus = should_autofocus_category_filter(cat, flask.request)
-        return flask.render_template('index.html',
-            snippet = snippet, section = section, article_url = aurl,
-            article_title = atitle, current_category = cat,
-            next_snippet_id = next_snippet_id,
-            cn_marker = CITATION_NEEDED_MARKER,
-            cn_html = CITATION_NEEDED_MARKUP,
-            ref_marker = REF_MARKER,
-            ref_html = SUPERSCRIPT_MARKUP,
-            config = cfg,
-            lang_dir = lang_dir,
-            category_filter_autofocus = autofocus)
-
-    id = select_random_id(lang_code, cat)
-    return flask.redirect(
-        flask.url_for('citation_hunt',
-            id = id, cat = cat.id, lang_code = lang_code))
-
-@app.route('/stats.html')
-def stats_html():
-    days = flask.request.args.get('days', 14)
-
-    import json
-    lang_codes = sorted(config.lang_code_to_config.keys())
-
-    def rows_to_data_table(header, rows):
-        data_rows = []
-        for date, count, lang_code in rows:
-            if lang_code not in config.lang_code_to_config:
-                continue
-            # find the row corresponding to this date
-            for r in data_rows:
-                if r[0] == date:
-                    dr = r
-                    break
-            else:
-                # add a row if it doesn't exist yet
-                dr = [date] + [0] * len(lang_codes)
-                data_rows.append(dr)
-
-            dc = lang_codes.index(lang_code) + 1
-            dr[dc] = count
-        return [[header] + lang_codes] + data_rows
-
-    graphs = [] # title, data table as array, type
-    stats_cursor = get_stats_db().cursor()
-    lang_cursors = {lc: get_db(lc).cursor() for lc in lang_codes}
-
-    # TODO exclude crawlers?
-    stats_cursor.execute('''
-        SELECT DATE_FORMAT(ts, GET_FORMAT(DATE, 'ISO')) AS dt,
-        COUNT(*), lang_code FROM requests WHERE snippet_id IS NOT NULL
-        AND status_code = 200 AND DATEDIFF(NOW(), ts) <= %s
-        GROUP BY dt, lang_code ORDER BY dt, lang_code''', (days,))
-    graphs.append((
-        'Number of snippets served in the past %s days' % days,
-        json.dumps(rows_to_data_table('Date', list(stats_cursor))), 'line'))
-
-    for lc in lang_codes:
-        data_rows = []
-        stats_cursor.execute('''
-            SELECT category_id, COUNT(*) FROM requests
-            WHERE snippet_id IS NOT NULL AND category_id IS NOT NULL AND
-            category_id != "all" AND status_code = 200
-            AND DATEDIFF(NOW(), ts) <= %s AND lang_code = %s
-            GROUP BY category_id ORDER BY COUNT(*) DESC LIMIT 30
-        ''', (days, lc))
-        for category_id, count in stats_cursor:
-            c = lang_cursors[lc]
-            c.execute('''
-                SELECT title FROM categories WHERE id = %s''', (category_id,))
-            title = list(c)[0][0] if c.rowcount else None
-            data_rows.append((title, count))
-        graphs.append((
-            '30 most popular categories in the past %s days, %s' % (days, lc),
-            json.dumps([['Category', 'Count']] + data_rows), 'table'))
-
-    return flask.render_template('stats.html', graphs = graphs)
+app.add_url_rule('/<lang_code>', view_func = handlers.citation_hunt)
+app.add_url_rule('/stats.html', view_func = handlers.stats)
 
 @app.route('/<lang_code>/categories.html')
-@validate_lang_code
+@handlers.validate_lang_code
 def categories_html(lang_code):
     response = flask.make_response(
         flask.render_template('categories.html',
@@ -318,7 +76,7 @@ def log_request(response):
     referrer = flask.request.referrer
     status_code = response.status_code
 
-    with get_stats_db() as cursor, chdb.ignore_warnings():
+    with handlers.get_stats_db() as cursor, chdb.ignore_warnings():
         cursor.execute('INSERT INTO requests VALUES '
             '(NOW(), %s, %s, %s, %s, %s, %s, %s, %s)',
             (lang_code, id, cat, url, prefetch, user_agent,
