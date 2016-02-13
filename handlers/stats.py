@@ -13,7 +13,7 @@ def load_is_crawler(stats_db):
         file(os.path.join(
             os.path.dirname(__file__),
             'crawler-user-agents', 'crawler-user-agents.json')))
-    with stats_db as cursor:
+    with stats_db as cursor, chdb.ignore_warnings():
         cursor.execute('DROP FUNCTION IF EXISTS IS_CRAWLER')
         cursor.execute('''
             CREATE FUNCTION IS_CRAWLER (user_agent VARCHAR(1024))
