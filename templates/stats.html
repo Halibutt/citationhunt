@@ -8,31 +8,56 @@
     <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
   </head>
   <body>
+    <style>
+      body {
+        padding: 20px;
+      }
+      h2 {
+        font-family: sans-serif;
+        font-weight: bold;
+        font-size: medium;
+      }
+      .chart-wrapper {
+        margin: 20px auto;
+      }
+    </style>
     <script type="text/javascript">
       google.charts.load("current", {"packages":["corechart", "table"]});
       google.charts.setOnLoadCallback(draw);
 
-      function createChartElement(idx) {
+      function createChartElement(idx, title) {
+        var chartWrapper = document.createElement("section");
+        chartWrapper.setAttribute("id", "chart-wrapper" + idx);
+        chartWrapper.classList.add("chart-wrapper");
+
+        var h = document.createElement("h2");
+        h.textContent = title;
+        h.classList.add("chart-title");
+        chartWrapper.appendChild(h);
+
         var chartElement = document.createElement("div");
-        chartElement.setAttribute("id", "chart" + idx);
+        chartElement.setAttribute("id", "chart-" + idx);
         chartElement.classList.add("chart");
-        document.body.appendChild(chartElement);
+
+        chartWrapper.appendChild(chartElement);
+        document.body.appendChild(chartWrapper);
         return chartElement;
       }
 
       {% for (title, data, type) in graphs %}
       function draw{{ loop.index }}() {
         var data = new google.visualization.arrayToDataTable({{ data | safe }}, false);
-        var chartElement = createChartElement({{ loop.index }});
+        var chartElement = createChartElement({{ loop.index }}, "{{ title }}");
         var options = {};
 
-        {% if type == 'line' %}
+        {% if type == "line" %}
         var chart = new google.visualization.LineChart(chartElement);
-        options.title = "{{ title }}";
         options.legend = {position: "bottom"};
-        {% elif type == 'table' %}
+        options.width = "100%";
+        {% elif type == "table" %}
         var chart = new google.visualization.Table(chartElement);
-        options.page = 'enable';
+        options.page = "enable";
+        options.width = "40%";
         {% endif %}
 
         chart.draw(data, options);
