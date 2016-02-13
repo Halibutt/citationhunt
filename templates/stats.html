@@ -1,0 +1,39 @@
+<!DOCTYPE HTML>
+
+<html lang=en dir=ltr>
+  <head>
+    <title>Citation Hunt</title>
+    <meta name="robots" content="nofollow, noodp, noarchive, noindex">
+    <meta name="description" content="Citation Hunt">
+    <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
+  </head>
+  <body>
+    <script type="text/javascript">
+      google.charts.load('current', {"packages":["corechart"]});
+      google.charts.setOnLoadCallback(draw);
+
+      function createChartElement(idx) {
+        var chartElement = document.createElement("div");
+        chartElement.setAttribute("id", "chart" + idx);
+        chartElement.classList.add("chart");
+        document.body.appendChild(chartElement);
+        return chartElement;
+      }
+
+      {% for (title, data, type) in graphs %}
+      function draw{{ loop.index }}() {
+        var data = new google.visualization.arrayToDataTable({{ data | safe }}, false);
+        var chartElement = createChartElement({{ loop.index }});
+        var chart = new google.visualization.LineChart(chartElement);
+        chart.draw(data, {title: "{{ title }}", legend: {position: "bottom"}});
+      }
+      {% endfor %}
+
+      function draw() {
+        {% for (title, data, type) in graphs %}
+          draw{{ loop.index }}();
+        {% endfor %}
+      }
+    </script>
+  </body>
+</html>
