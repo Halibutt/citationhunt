@@ -9,7 +9,7 @@
   </head>
   <body>
     <script type="text/javascript">
-      google.charts.load('current', {"packages":["corechart"]});
+      google.charts.load("current", {"packages":["corechart", "table"]});
       google.charts.setOnLoadCallback(draw);
 
       function createChartElement(idx) {
@@ -24,8 +24,18 @@
       function draw{{ loop.index }}() {
         var data = new google.visualization.arrayToDataTable({{ data | safe }}, false);
         var chartElement = createChartElement({{ loop.index }});
+        var options = {};
+
+        {% if type == 'line' %}
         var chart = new google.visualization.LineChart(chartElement);
-        chart.draw(data, {title: "{{ title }}", legend: {position: "bottom"}});
+        options.title = "{{ title }}";
+        options.legend = {position: "bottom"};
+        {% elif type == 'table' %}
+        var chart = new google.visualization.Table(chartElement);
+        options.page = 'enable';
+        {% endif %}
+
+        chart.draw(data, options);
       }
       {% endfor %}
 

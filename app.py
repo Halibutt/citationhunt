@@ -221,39 +221,59 @@ def citation_hunt(lang_code):
 @app.route('/stats.html')
 def stats_html():
     import json
+    lang_codes = sorted(config.lang_code_to_config.keys())
+
+    def rows_to_data_table(header, rows):
+        data_rows = []
+        for date, count, lang_code in rows:
+            if lang_code not in config.lang_code_to_config:
+                continue
+            # find the row corresponding to this date
+            for r in data_rows:
+                if r[0] == date:
+                    dr = r
+                    break
+            else:
+                # add a row if it doesn't exist yet
+                dr = [date] + [0] * len(lang_codes)
+                data_rows.append(dr)
+
+            dc = lang_codes.index(lang_code) + 1
+            dr[dc] = count
+        return [[header] + lang_codes] + data_rows
 
     graphs = [] # title, data table as array, type
-    cursor = get_stats_db().cursor()
+    stats_cursor = get_stats_db().cursor()
+    lang_cursors = {lc: get_db(lc).cursor() for lc in lang_codes}
 
     # TODO exclude crawlers?
-    cursor.execute('''
-        SELECT DATE_FORMAT(ts, GET_FORMAT(DATE, 'ISO')) AS dt, 
-        COUNT(*), lang_code FROM requests WHERE snippet_id IS NOT NULL 
-        AND status_code = 200 AND DATEDIFF(NOW(), ts) <= 14 
-        GROUP BY dt, lang_code ORDER BY dt, lang_code;''')
-    rows = list(cursor)
-    data_rows = []
-    lang_codes = sorted(config.lang_code_to_config.keys())
-    for date, count, lang_code in cursor:
-        if lang_code not in config.lang_code_to_config:
-            continue
-        # find the row corresponding to this date
-        for r in data_rows:
-            if r[0] == date:
-                dr = r
-                break
-        else:
-            # add a row if it doesn't exist yet
-            dr = [date] + [0] * len(lang_codes)
-            data_rows.append(dr)
-
-        dc = lang_codes.index(lang_code) + 1
-        dr[dc] = count
-
-    data = [['Date'] + lang_codes] + data_rows
+    stats_cursor.execute('''
+        SELECT DATE_FORMAT(ts, GET_FORMAT(DATE, 'ISO')) AS dt,
+        COUNT(*), lang_code FROM requests WHERE snippet_id IS NOT NULL
+        AND status_code = 200 AND DATEDIFF(NOW(), ts) <= 14
+        GROUP BY dt, lang_code ORDER BY dt, lang_code''')
     graphs.append((
         'Number of snippets served in the past 14 days',
-        json.dumps(data), type))
+        json.dumps(rows_to_data_table('Date', list(stats_cursor))), 'line'))
+
+    for lc in lang_codes:
+        data_rows = []
+        stats_cursor.execute('''
+            SELECT category_id, COUNT(*) FROM requests
+            WHERE snippet_id IS NOT NULL AND category_id IS NOT NULL AND
+            category_id != "all" AND status_code = 200 AND DATEDIFF(NOW(), ts) <= 14
+            AND lang_code = %s GROUP BY category_id ORDER BY COUNT(*) DESC LIMIT 30
+        ''', (lc,))
+        for category_id, count in stats_cursor:
+            c = lang_cursors[lc]
+            c.execute('''
+                SELECT title FROM categories WHERE id = %s''', (category_id,))
+            title = list(c)[0][0] if c.rowcount else None
+            data_rows.append((title, count))
+        graphs.append((
+            '30 most popular categories in the past 14 days, ' + lc,
+            json.dumps([['Category', 'Count']] + data_rows), 'table'))
+
     return flask.render_template('stats.html', graphs = graphs)
 
 @app.route('/<lang_code>/categories.html')
