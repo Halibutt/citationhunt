@@ -92,7 +92,7 @@ def stats():
         stats_cursor.execute('''
             SELECT referrer, COUNT(*) FROM requests
             WHERE status_code = 200 AND DATEDIFF(NOW(), ts) <= %s
-            AND referrer not like "%tools.wmflabs.org/citationhunt%"
+            AND referrer NOT LIKE "%%tools.wmflabs.org/citationhunt%%"
             AND lang_code = %s AND ''' + is_not_crawler +
             '''GROUP BY referrer ORDER BY COUNT(*) DESC LIMIT 30
         ''', (days, lc))
