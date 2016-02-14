@@ -51,7 +51,7 @@ def stats():
         COUNT(*), lang_code FROM requests
         WHERE snippet_id IS NOT NULL AND status_code = 200
         AND DATEDIFF(NOW(), ts) <= %s AND ''' + is_not_crawler +
-        '''GROUP BY dt, lang_code ORDER BY dt, lang_code''', (days,))
+        ''' GROUP BY dt, lang_code ORDER BY dt, lang_code''', (days,))
     graphs.append((
         'Number of snippets served in the past %s days' % days,
         json.dumps(rows_to_data_table('Date', list(stats_cursor))), 'line'))
@@ -62,7 +62,7 @@ def stats():
         WHERE snippet_id IS NOT NULL AND status_code = 200 AND
         user_agent != "NULL" AND DATEDIFF(NOW(), ts) <= %s
         AND ''' + is_not_crawler +
-        '''GROUP BY dt, lang_code ORDER BY dt, lang_code''',
+        ''' GROUP BY dt, lang_code ORDER BY dt, lang_code''',
         (days,))
     graphs.append((
         'Distinct user agents in the past %s days' % days,
@@ -76,7 +76,7 @@ def stats():
             category_id != "all" AND status_code = 200
             AND DATEDIFF(NOW(), ts) <= %s AND lang_code = %s
             AND ''' + is_not_crawler +
-            '''GROUP BY category_id ORDER BY COUNT(*) DESC LIMIT 30
+            ''' GROUP BY category_id ORDER BY COUNT(*) DESC LIMIT 30
         ''', (days, lc))
         for category_id, count in stats_cursor:
             c = lang_cursors[lc]
@@ -94,7 +94,7 @@ def stats():
             WHERE status_code = 200 AND DATEDIFF(NOW(), ts) <= %s
             AND referrer NOT LIKE "%%tools.wmflabs.org/citationhunt%%"
             AND lang_code = %s AND ''' + is_not_crawler +
-            '''GROUP BY referrer ORDER BY COUNT(*) DESC LIMIT 30
+            ''' GROUP BY referrer ORDER BY COUNT(*) DESC LIMIT 30
         ''', (days, lc))
         graphs.append((
             '30 most popular referrers in the past %s days, %s' % (days, lc),
