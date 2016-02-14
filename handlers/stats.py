@@ -88,7 +88,7 @@ def stats():
             '30 most popular categories in the past %s days, %s' % (days, lc),
             json.dumps([['Category', 'Count']] + data_rows), 'table'))
 
-        data_rows = []
+        # FIXME don't assume tools labs?
         stats_cursor.execute('''
             SELECT referrer, COUNT(*) FROM requests
             WHERE status_code = 200 AND DATEDIFF(NOW(), ts) <= %s
@@ -98,7 +98,7 @@ def stats():
         ''', (days, lc))
         graphs.append((
             '30 most popular referrers in the past %s days, %s' % (days, lc),
-            json.dumps([['Referrer', 'Count']] + data_rows), 'table'))
+            json.dumps([['Referrer', 'Count']] + list(stats_cursor)), 'table'))
 
     return flask.render_template('stats.html', graphs = graphs)
 
