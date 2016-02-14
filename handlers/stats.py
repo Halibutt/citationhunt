@@ -56,17 +56,29 @@ def stats():
         'Number of snippets served in the past %s days' % days,
         json.dumps(rows_to_data_table('Date', list(stats_cursor))), 'line'))
 
+    stats_cursor.execute('''
+        SELECT DATE_FORMAT(ts, GET_FORMAT(DATE, 'ISO')) AS dt,
+        COUNT(DISTINCT user_agent), lang_code FROM requests
+        WHERE snippet_id IS NOT NULL AND status_code = 200 AND
+        user_agent != "NULL" AND DATEDIFF(NOW(), ts) <= %s
+        AND ''' + is_not_crawler +
+        '''GROUP BY dt, lang_code ORDER BY dt, lang_code''',
+        (days,))
+    graphs.append((
+        'Distinct user agents in the past %s days' % days,
+        json.dumps(rows_to_data_table('Date', list(stats_cursor))), 'line'))
+
     for lc in lang_codes:
         data_rows = []
         stats_cursor.execute('''
-            SELECT category_id, COUNT(*), user_agent FROM requests
+            SELECT category_id, COUNT(*) FROM requests
             WHERE snippet_id IS NOT NULL AND category_id IS NOT NULL AND
             category_id != "all" AND status_code = 200
             AND DATEDIFF(NOW(), ts) <= %s AND lang_code = %s
             AND ''' + is_not_crawler +
             '''GROUP BY category_id ORDER BY COUNT(*) DESC LIMIT 30
         ''', (days, lc))
-        for category_id, count, user_agent in stats_cursor:
+        for category_id, count in stats_cursor:
             c = lang_cursors[lc]
             c.execute('''
                 SELECT title FROM categories WHERE id = %s''', (category_id,))
@@ -75,6 +87,18 @@ def stats():
         graphs.append((
             '30 most popular categories in the past %s days, %s' % (days, lc),
             json.dumps([['Category', 'Count']] + data_rows), 'table'))
+
+        data_rows = []
+        stats_cursor.execute('''
+            SELECT referrer, COUNT(*) FROM requests
+            WHERE status_code = 200 AND DATEDIFF(NOW(), ts) <= %s
+            AND referrer not like "%tools.wmflabs.org/citationhunt%"
+            AND lang_code = %s AND ''' + is_not_crawler +
+            '''GROUP BY referrer ORDER BY COUNT(*) DESC LIMIT 30
+        ''', (days, lc))
+        graphs.append((
+            '30 most popular referrers in the past %s days, %s' % (days, lc),
+            json.dumps([['Referrer', 'Count']] + data_rows), 'table'))
 
     return flask.render_template('stats.html', graphs = graphs)
 
