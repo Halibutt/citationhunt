@@ -95,7 +95,6 @@ def select_next_id(lang_code, curr_id, cat = CATEGORY_ALL):
 def should_autofocus_category_filter(cat, request):
     return cat is CATEGORY_ALL and not request.MOBILE
 
-
 @validate_lang_code
 def citation_hunt(lang_code):
     id = flask.request.args.get('id')

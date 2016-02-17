@@ -35,7 +35,7 @@ def index(lang_code):
     pass # nothing to do but validate lang_code
 
 app.add_url_rule('/<lang_code>', view_func = handlers.citation_hunt)
-app.add_url_rule('/stats.html', view_func = handlers.stats)
+app.add_url_rule('/<lang_code>/stats.html', view_func = handlers.stats)
 
 @app.route('/<lang_code>/categories.html')
 @handlers.validate_lang_code
