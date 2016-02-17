@@ -59,7 +59,7 @@
 
         {% if type == "line" %}
         var chart = new google.visualization.LineChart(chartElement);
-        options.legend = {position: "bottom"};
+        options.legend = {position: "none"};
         options.width = "100%";
         {% elif type == "table" %}
         var chart = new google.visualization.Table(chartElement);
