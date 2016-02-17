@@ -73,7 +73,7 @@ def stats(lang_code):
         title = list(ch_cursor)[0][0] if ch_cursor.rowcount else None
         data_rows.append((title, count))
     graphs.append((
-        '30 most popular categories in the past %d days' % days,
+        '30 most popular categories in the past %s days' % days,
         json.dumps([['Category', 'Count']] + data_rows), 'table'))
 
     return flask.render_template('stats.html', graphs = graphs)
