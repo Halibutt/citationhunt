@@ -19,7 +19,7 @@ def load_is_not_crawler_sql():
 
 @validate_lang_code
 def stats(lang_code):
-    days = flask.request.args.get('days', 14)
+    days = flask.request.args.get('days', 10)
     is_not_crawler_sql = load_is_not_crawler_sql()
 
     graphs = [] # title, data table as array, type
