@@ -59,18 +59,6 @@ def stats(lang_code):
         '30 most popular referrers in the past %s days' % days,
         json.dumps([['Referrer', 'Count']] + list(stats_cursor)), 'table'))
 
-    # FIXME don't assume tools labs?
-    stats_cursor.execute('''
-        SELECT user_agent, COUNT(*) FROM requests_''' + lang_code + '''
-        WHERE status_code = 200 AND DATEDIFF(NOW(), ts) <= %s
-        AND referrer NOT LIKE "%%tools.wmflabs.org/citationhunt%%"
-        AND ''' + is_not_crawler_sql +
-        ''' GROUP BY user_agent ORDER BY COUNT(*) DESC LIMIT 30
-    ''', (days,))
-    graphs.append((
-        '30 most popular user agents in the past %s days' % days,
-        json.dumps([['User agent', 'Count']] + list(stats_cursor)), 'table'))
-
     data_rows = []
     stats_cursor.execute('''
         SELECT category_id, COUNT(*) FROM requests_''' + lang_code +
@@ -87,5 +75,17 @@ def stats(lang_code):
     graphs.append((
         '30 most popular categories in the past %s days' % days,
         json.dumps([['Category', 'Count']] + data_rows), 'table'))
+
+    # FIXME don't assume tools labs?
+    stats_cursor.execute('''
+        SELECT user_agent, COUNT(*) FROM requests_''' + lang_code + '''
+        WHERE status_code = 200 AND DATEDIFF(NOW(), ts) <= %s
+        AND referrer NOT LIKE "%%tools.wmflabs.org/citationhunt%%"
+        AND ''' + is_not_crawler_sql +
+        ''' GROUP BY user_agent ORDER BY COUNT(*) DESC LIMIT 30
+    ''', (days,))
+    graphs.append((
+        '30 most popular user agents in the past %s days' % days,
+        json.dumps([['User agent', 'Count']] + list(stats_cursor)), 'table'))
 
     return flask.render_template('stats.html', graphs = graphs)
